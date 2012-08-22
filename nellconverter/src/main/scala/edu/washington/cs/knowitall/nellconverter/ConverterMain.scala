@@ -13,7 +13,7 @@ import edu.washington.cs.knowitall.tool.chunk.OpenNlpChunker
  *    nellrelations_to_humanformat.csv -- for human-readable rels
  *    
  *  Data files needed:
- *    NELL_relations_<iteration_num>.csv -- the data file with only relations, no category beliefs. 
+ *    the data file with only relations, no category beliefs. Supply the name of this file as an argument.  
  */
 object ConverterMain extends App {
   
@@ -42,8 +42,8 @@ object ConverterMain extends App {
     relationMap += (relation(0).toLowerCase.trim -> (relation(1), relation(2)))
   }
   
-  for (line <- io.Source.fromFile("NELL_relations_620.csv").getLines.map(line => line.split("\t"))
-      if !isFirstLine(line)) {
+  for (line <- io.Source.fromFile(args(0)).getLines.map(line => line.split("\t"))
+      if !isFirstLine(line) && isRelation(line)) {
     processLine(line)
   }
   
@@ -154,6 +154,14 @@ object ConverterMain extends App {
    */
   def isFirstLine(line: Array[String]): Boolean = {
     line(Relation) == "Relation"
+  }
+  
+  /** Determines whether line is a relation. 
+   *  @param line a line from the nell beliefs file.
+   *  @return true if a relation belief; false otherwise. 
+   */
+  def isRelation(line: Array[String]): Boolean = {
+    line(Relation).startsWith("concept:")
   }
   
   /** Gets the "Best Entity literalString" from a line from the belief file.
