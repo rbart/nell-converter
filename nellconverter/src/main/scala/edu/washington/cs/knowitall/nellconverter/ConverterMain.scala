@@ -1,6 +1,7 @@
 package edu.washington.cs.knowitall.nellconverter
 import java.io.File
 import edu.washington.cs.knowitall.tool.chunk.OpenNlpChunker
+import scala.collection.mutable.ListBuffer
 
 object ConverterMain extends App {
 
@@ -9,20 +10,28 @@ object ConverterMain extends App {
   val Value = 2
   val Sources = 5
   
-  val patternFile = io.Source.fromFile("NELL_patterns.csv").getLines
+  val patternFile = io.Source.fromFile("NELL_patterns_620.csv").getLines.map(line => line.split("\t"))
+  val relationFile = io.Source.fromFile("nellrelations_to_humanformat.csv").getLines.map(line => line.split("\t"))
   val chunker = new OpenNlpChunker
-  val relationStrings = io.Source.fromFile("nellrelations_to_humanformat.csv").getLines.map(line => line.split("\t"))
   
   // process the file with relation strings to get a map from a 
   // nell relation to (human-formatted processed string, human-formatted string) 
   import scala.collection.mutable.HashMap
   val relationMap = HashMap[String, Tuple2[String, String]]()
-  for (relation <- relationStrings) {
+  for (relation <- relationFile) {
     relationMap += (relation(0).toLowerCase -> (relation(1), relation(2)))
   }
   
-  // TODO: process the file with nell patterns used by extractors to get a 
-  // mapping from relation to some collection of patterns. 
+  val RelationEntity = 0
+  val PatternValue = 2
+  
+  val patternMap = HashMap[String, ListBuffer[String]]()
+  for (line <- patternFile) {
+    patternMap get line(RelationEntity) match {
+      case Some(str) => str += line(PatternValue)
+      case None => patternMap += (line(RelationEntity) -> ListBuffer(line(PatternValue)))
+    }
+  }
   
   for (line <- io.Source.fromFile("NELL_relations_620.csv").getLines.map(line => line.split("\t"))
       if !isFirstLine(line)) {
