@@ -1,10 +1,11 @@
 package edu.washington.cs.knowitall.nellconverter
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.ListBuffer
-
 import edu.washington.cs.knowitall.browser.extraction.ReVerbExtraction
 import edu.washington.cs.knowitall.collection.immutable.Interval
 import edu.washington.cs.knowitall.tool.chunk.OpenNlpChunker
+import scala.io.Source
+import java.io.File
 
 /** Converts from a file containing ONLY NELL's relation beliefs to serialized
  *  ReVerbExtraction objects. 
@@ -13,11 +14,9 @@ import edu.washington.cs.knowitall.tool.chunk.OpenNlpChunker
  *    nellrelations_to_humanformat.csv -- for human-readable rels
  *    
  *  Data files needed:
- *    the data file with only relations, no category beliefs. Supply the name of this file as an argument.  
+ *    the data file with only relations, no category beliefs. Supply the name of this file as an argument.
  */
 object ConverterMain extends App {
-  
-  val BaseUrl = """http://rtw.ml.cmu.edu/rtw/kbbrowser/"""
   
   // to separate between belief and pattern in ReVerbExtraction object
   val PatternSeparator = """ | NELL: """
@@ -28,19 +27,44 @@ object ConverterMain extends App {
   val Value = 2
   val Extractions = 6
   
-  // relevant to relpatterns file
-  val RelationEntity = 0
-  val PatternValue = 2
-  
-  val relationFile = io.Source.fromFile("nellrelations_to_humanformat.csv").getLines.map(line => line.split("\t"))
+  // used to translate from strings to Seq[ChunkedToken]
   val chunker = new OpenNlpChunker
   
+  // used to construct URI for ReVerbExtractions
+  val BaseUrl = """http://rtw.ml.cmu.edu/rtw/kbbrowser/"""
+  
+  var beliefs: Option[File] = null
+  var relFileOpt: Option[File] = null
+  var outFile: Option[File] = null
+  parser.parse(args, Config()) map { config => 
+    beliefs = config.beliefs
+    relFileOpt = config.relFile
+  }
+  val relationUri = Option(this.getClass.getResource("nellrelations_to_humanformat.csv")).
+                      getOrElse(throw new IllegalArgumentException())
+  val relFile = relFileOpt.getOrElse(new File(relationUri.toString))
+  
+  System.err.println("Start mapping relations to human-readable strings.")
+  val relationMap = HashMap[String, Tuple2[String, String]]()
+  
+  var stream: java.io.InputStream = null
+  try {
+    stream = relationUri.openStream()
+    val relations = Source.fromInputStream(stream, "UTF-8").getLines.
+                      map(line => line.split("\t"))
+    for (relation <- relations) {
+      relationMap += (relation(0).toLowerCase.trim -> (relation(1), relation(2)))
+    }
+  } finally {
+    if (stream != null)
+      stream.close()
+  }
+  System.err.println("Finished mapping relations.")
+  
+  System.err.println("Reading data file (beliefs).")
   // process the file with relation strings to get a map from a 
   // nell relation to (human-formatted processed string, human-formatted string) 
-  val relationMap = HashMap[String, Tuple2[String, String]]()
-  for (relation <- relationFile) {
-    relationMap += (relation(0).toLowerCase.trim -> (relation(1), relation(2)))
-  }
+
   
   for (line <- io.Source.fromFile(args(0)).getLines.map(line => line.split("\t"))
       if !isFirstLine(line) && isRelation(line)) {
@@ -86,13 +110,13 @@ object ConverterMain extends App {
     if (patternList.length == 0) {
       val indSeq = chunker.chunk(belief).toIndexedSeq
       val re = new ReVerbExtraction(indSeq, arg1Int, relInt, arg2Int, url)
-      println(ReVerbExtraction.serializeToString(re))
+      println(re.toString)
     } else {
       for (pattern <- patternList) {
         val fixedPat = pattern replace("arg1", arg1) replace("arg2", arg2)
         val indSeq = chunker.chunk(belief + PatternSeparator + fixedPat).toIndexedSeq
         val re = new ReVerbExtraction(indSeq, arg1Int, relInt, arg2Int, url)
-        println(ReVerbExtraction.serializeToString(re))
+        println(re.toString)
       }
     }
   }
@@ -234,5 +258,25 @@ object ConverterMain extends App {
   def hasNoCategories(line: Array[String]): Boolean = {
     val length = line.length
     !line(length - 1).contains("concept:") && !line(length - 2).contains("concept:")
+  }
+  
+  // defines how command line args are parsed.
+  case class Config(
+    beliefs: Option[File] = None, 
+    relFile: Option[File] = None
+  )
+  
+  // scopt parser
+  // NEED to supply beliefs file
+  // relfile and outfile are optional
+  private val parser = new scopt.immutable.OptionParser[Config]("nell-converter", "1.0") {
+    def options = Seq(
+      arg("<beliefs-file>", "path to file containing NELL beliefs") {
+        (path: String, c: Config) => c.copy(beliefs = Some(new File(path)))
+      },
+      opt("r", "rels", "<relations-file>", "path to file containing mapping from NELL relations to human-readable strings") { 
+        (path: String, c: Config) => c.copy(relFile = Some(new File(path))) 
+      }
+    )
   }
 }
