@@ -4,6 +4,8 @@ import scala.collection.mutable.ListBuffer
 import edu.washington.cs.knowitall.browser.extraction.ReVerbExtraction
 import edu.washington.cs.knowitall.collection.immutable.Interval
 import edu.washington.cs.knowitall.tool.chunk.OpenNlpChunker
+import org.slf4j.LoggerFactory;
+import org.slf4j.Logger;
 import scala.io.Source
 import java.io.File
 
@@ -18,6 +20,8 @@ import java.io.File
  */
 object ConverterMain extends App {
   
+  val logger = LoggerFactory.getLogger(ConverterMain.getClass.toString);
+  
   // to separate between belief and pattern in ReVerbExtraction object
   val PatternSeparator = """ | NELL: """
   
@@ -27,42 +31,66 @@ object ConverterMain extends App {
   // used to construct URI for ReVerbExtractions
   val BaseUrl = """http://rtw.ml.cmu.edu/rtw/kbbrowser/"""
   
-  var beliefs: Option[File] = null
-  var relFileOpt: Option[File] = null
-  var outFile: Option[File] = null
-  parser.parse(args, Config()) map { config => 
-    beliefs = config.beliefs
-    relFileOpt = config.relFile
+  logger.info("Parsing command line args.")
+  var bels: Option[File] = None
+  var rels: Option[File] = None
+  
+  val parser = new scopt.immutable.OptionParser[Config]("nell-converter", "1.0") {
+    def options = Seq(
+      argOpt("<beliefs-file>", "path to file containing NELL beliefs") {
+        (path: String, c: Config) => c.copy(beliefs = Some(new File(path)))
+      },
+      opt("r", "rels", "<relations-file>", "path to file containing mapping from NELL relations to human-readable strings") { 
+        (path: String, c: Config) => c.copy(relFile = Some(new File(path))) 
+      }
+    )
   }
-  val relationUri = Option(this.getClass.getResource("nellrelations_to_humanformat.csv")).
-                      getOrElse(throw new IllegalArgumentException())
-  val relFile = relFileOpt.getOrElse(new File(relationUri.toString))
+  parser.parse(args, Config()) map { config => 
+    bels = config.beliefs
+    rels = config.relFile
+  }
   
-  System.err.println("Start mapping relations to human-readable strings.")
+  logger.info("Reading config file with relations, constructing map.")
   val relationMap = HashMap[String, Tuple2[String, String]]()
-  
-  var stream: java.io.InputStream = null
+  var source:scala.io.BufferedSource = null
   try {
-    stream = relationUri.openStream()
-    val relations = Source.fromInputStream(stream, "UTF-8").getLines.
+    if (rels == None) 
+      source = Source.fromInputStream(this.getClass.
+                 getResource("nellrelations_to_humanformat.csv").openStream())
+    else 
+      source = Source.fromFile(rels.get, "UTF-8")
+    val relations = source.getLines.
                       map(line => line.split("\t"))
+    
+    // process the file with relation strings to get a map from a 
+    // nell relation to (human-formatted processed string, human-formatted string) 
     for (relation <- relations) {
       relationMap += (relation(0).toLowerCase.trim -> (relation(1), relation(2)))
     }
   } finally {
-    if (stream != null)
-      stream.close()
+    if (source != null) {
+      source.close()
+      logger.info("Finished mapping relations.")
+    }
   }
-  System.err.println("Finished mapping relations.")
   
-  System.err.println("Reading data file (beliefs).")
-  // process the file with relation strings to get a map from a 
-  // nell relation to (human-formatted processed string, human-formatted string) 
-
-  
-  for (line <- io.Source.fromFile(args(0)).getLines.map(line => new NellBelief(line))
-      if !line.isFirstLine && line.isRelation) {
-    processLine(line)
+  logger.info("Reading data file (beliefs), constructing iterator.")
+  try {
+    val beliefsFile = bels.getOrElse(throw new IllegalArgumentException("no beliefs file supplied."))
+    source = Source.fromFile(beliefsFile, "UTF-8")
+    val beliefs = source.getLines.map(line => new NellBelief(line))
+    
+    logger.info("Processing beliefs, constructing ReVerb objects.")
+    // iterate over the beliefs file to construct ReVerb objects
+    for (line <- beliefs
+         if !line.isFirstLine && line.isRelation) {
+      processLine(line)
+    }
+  } finally {
+    if (source != null) {
+      source.close()
+      logger.info("Finished mapping relations.")
+    }
   }
   
   /** Given a nell belief, prints out the corresponding ReVerbExtraction objects.
@@ -123,25 +151,10 @@ object ConverterMain extends App {
     
     relationPair.getOrElse(throw new IllegalArgumentException("relation: " + relation))._1
   }
-
   
   // defines how command line args are parsed.
   case class Config(
     beliefs: Option[File] = None, 
     relFile: Option[File] = None
   )
-  
-  // scopt parser
-  // NEED to supply beliefs file
-  // relfile and outfile are optional
-  private val parser = new scopt.immutable.OptionParser[Config]("nell-converter", "1.0") {
-    def options = Seq(
-      arg("<beliefs-file>", "path to file containing NELL beliefs") {
-        (path: String, c: Config) => c.copy(beliefs = Some(new File(path)))
-      },
-      opt("r", "rels", "<relations-file>", "path to file containing mapping from NELL relations to human-readable strings") { 
-        (path: String, c: Config) => c.copy(relFile = Some(new File(path))) 
-      }
-    )
-  }
 }
