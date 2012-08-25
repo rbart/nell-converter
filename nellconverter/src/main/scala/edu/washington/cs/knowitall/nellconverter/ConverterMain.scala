@@ -37,7 +37,7 @@ object ConverterMain extends App {
   
   val parser = new scopt.immutable.OptionParser[Config]("nell-converter", "1.0") {
     def options = Seq(
-      argOpt("<beliefs-file>", "path to file containing NELL beliefs") {
+      arg("<beliefs-file>", "path to file containing NELL beliefs") {
         (path: String, c: Config) => c.copy(beliefs = Some(new File(path)))
       },
       opt("r", "rels", "<relations-file>", "path to file containing mapping from NELL relations to human-readable strings") { 
@@ -89,7 +89,7 @@ object ConverterMain extends App {
   } finally {
     if (source != null) {
       source.close()
-      logger.info("Finished mapping relations.")
+      logger.info("Finished processing beliefs/converting file.")
     }
   }
   
@@ -147,9 +147,12 @@ object ConverterMain extends App {
   def getRelationLiteralString(line: NellBelief): String = {
     // get the non-human-formatted relation string sans the "concept:"
     val relation = line.getRelationField.substring("concept:".length).trim
-    val relationPair = relationMap.get(relation)
-    
-    relationPair.getOrElse(throw new IllegalArgumentException("relation: " + relation))._1
+
+      val relationPair = relationMap.get(relation)
+      relationPair.getOrElse({
+        logger.error("getRelationLiteralString(): Unknown relation: " + relation)
+        throw new IllegalArgumentException()
+      })._1
   }
   
   // defines how command line args are parsed.
