@@ -62,13 +62,37 @@
 
   <build>
     <sourceDirectory>src/main/scala</sourceDirectory>
-    <testSourceDirectory>src/test/scala</testSourceDirectory>
+    <resources>
+      <resource>
+        <targetPath>edu/washington/cs/knowitall/nellconverter</targetPath>
+        <filtering>false</filtering>
+        <directory>${basedir}/src/main/resources/edu/washington/cs/knowitall/nellconverter/</directory>
+        <includes>
+          <include>nellrelations_to_humanformat.csv</include>
+        </includes>
+      </resource>
+      <resource>
+        <filtering>false</filtering>
+        <directory>${basedir}/src/main/resources/edu/washington/cs/knowitall/nellconverter/</directory>
+        <includes>
+          <include>logback.xml</include>
+        </includes>
+      </resource>
+    </resources>
     <plugins>
       <!-- scala maven plugin -->
       <plugin>
         <groupId>net.alchim31.maven</groupId>
         <artifactId>scala-maven-plugin</artifactId>
         <version>3.0.2</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>compile</goal>
+              <goal>testCompile</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
       <plugin>
         <artifactId>maven-assembly-plugin</artifactId>
