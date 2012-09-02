@@ -84,7 +84,8 @@ object ConverterMain extends App {
     // iterate over the beliefs file to construct ReVerb objects
     for (line <- beliefs
          if !line.isFirstLine && line.isRelation) {
-      processLine(line)
+      try { processLine(line) }
+      catch { case e: Exception => e.printStackTrace }
     }
   } finally {
     if (source != null) {
